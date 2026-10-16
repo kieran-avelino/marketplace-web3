@@ -1,6 +1,8 @@
-# Marketplace Web3
+# TeyvatMarket
 
-Trabalho da 2ª avaliação prática (Opção B): loja descentralizada com cadastro de produtos, compra em ETH e histórico de compras.
+Trabalho da 2ª avaliação prática (Opção B): mercado descentralizado inspirado em Genshin Impact.
+
+Os mercadores de Teyvat cadastram itens, os viajantes compram pagando em ETH (as nossas Moras) e todas as compras ficam registradas no histórico. Depois da compra, o viajante pode avaliar o item de 1 a 5 estrelas. A Guilda dos Aventureiros fica com uma taxa de cada venda.
 
 ## Como rodar
 
@@ -13,7 +15,7 @@ npm run gas
 
 ## Pastas
 
-- `contracts/` contrato em Solidity
+- `contracts/` contrato `TeyvatMarket` em Solidity
 - `test/` testes
 - `ignition/modules/` script de deploy
 - `hardhat.config.ts` configuração (Sepolia)

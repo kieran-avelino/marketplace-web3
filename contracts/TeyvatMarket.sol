@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-// Marketplace descentralizado (Opção B)
-// vendedor cadastra produto, comprador paga em ETH e a compra fica no histórico
-contract Marketplace {
+// TeyvatMarket - mercado descentralizado de Teyvat (Opção B)
+// o mercador cadastra um item, o viajante paga em ETH (as nossas Moras)
+// e a compra fica registrada no diário do viajante (história)
+contract TeyvatMarket {
     struct Product {
         uint256 id;
         string name;
@@ -11,26 +12,26 @@ contract Marketplace {
         string imageURI;
         uint256 price; // em wei
         uint256 stock;
-        address seller;
+        address seller; // mercador
         bool active;
-        uint256 ratingSum; // soma de todas as notas
-        uint256 ratingCount; // quantas avaliações recebeu
+        uint256 ratingSum; // soma das estrelas recebidas
+        uint256 ratingCount; // quantos viajantes avaliaram
     }
 
     struct Purchase {
         uint256 id;
         uint256 productId;
-        address buyer;
+        address buyer; // viajante
         address seller;
         uint256 quantity;
         uint256 totalPaid;
         uint256 timestamp;
-        bool rated; // true depois que o comprador avalia
+        bool rated; // true depois que o viajante avalia
     }
 
-    address public immutable owner;
-    uint256 public platformFeeBps; // 250 = 2,5%
-    uint256 public constant MAX_FEE_BPS = 1000; // máx 10%
+    address public immutable owner; // o Arconte da loja (quem fez o deploy)
+    uint256 public platformFeeBps; // taxa da Guilda dos Aventureiros, 250 = 2,5%
+    uint256 public constant MAX_FEE_BPS = 1000; // a Guilda não cobra mais que 10%
 
     uint256 public productCount;
     uint256 public purchaseCount;
@@ -40,7 +41,7 @@ contract Marketplace {
     mapping(address => uint256[]) private purchasesByBuyer;
     mapping(address => uint256[]) private salesBySeller;
     mapping(address => uint256[]) private productsBySeller;
-    mapping(address => uint256) public pendingWithdrawals; // saldo que cada um pode sacar
+    mapping(address => uint256) public pendingWithdrawals; // Moras que cada um pode sacar
 
     bool private locked;
 
@@ -59,34 +60,35 @@ contract Marketplace {
     event PlatformFeeChanged(uint256 oldFeeBps, uint256 newFeeBps);
 
     modifier onlyOwner() {
-        require(msg.sender == owner, "Apenas o dono da plataforma");
+        require(msg.sender == owner, "Apenas o Arconte da loja");
         _;
     }
 
     modifier productExists(uint256 _productId) {
-        require(_productId > 0 && _productId <= productCount, "Produto inexistente");
+        require(_productId > 0 && _productId <= productCount, "Esse item nao existe em Teyvat");
         _;
     }
 
     modifier onlySeller(uint256 _productId) {
-        require(products[_productId].seller == msg.sender, "Apenas o vendedor do produto");
+        require(products[_productId].seller == msg.sender, "Apenas o mercador deste item");
         _;
     }
 
-    // evita chamar a função de novo antes dela terminar
+    // barreira pra ninguém entrar de novo antes da função terminar
     modifier nonReentrant() {
-        require(!locked, "Reentrancia bloqueada");
+        require(!locked, "Reentrancia bloqueada pela barreira");
         locked = true;
         _;
         locked = false;
     }
 
     constructor(uint256 _platformFeeBps) {
-        require(_platformFeeBps <= MAX_FEE_BPS, "Taxa acima do limite");
+        require(_platformFeeBps <= MAX_FEE_BPS, "Taxa da Guilda acima do limite");
         owner = msg.sender;
         platformFeeBps = _platformFeeBps;
     }
 
+    // mercador coloca um item à venda
     function addProduct(
         string calldata _name,
         string calldata _description,
@@ -94,9 +96,9 @@ contract Marketplace {
         uint256 _price,
         uint256 _stock
     ) external returns (uint256) {
-        require(bytes(_name).length > 0, "Nome obrigatorio");
-        require(_price > 0, "Preco deve ser maior que zero");
-        require(_stock > 0, "Estoque deve ser maior que zero");
+        require(bytes(_name).length > 0, "O item precisa de um nome");
+        require(_price > 0, "O preco deve ser maior que zero");
+        require(_stock > 0, "O estoque deve ser maior que zero");
 
         productCount++;
         products[productCount] = Product({
@@ -122,7 +124,7 @@ contract Marketplace {
         productExists(_productId)
         onlySeller(_productId)
     {
-        require(_price > 0, "Preco deve ser maior que zero");
+        require(_price > 0, "O preco deve ser maior que zero");
         Product storage p = products[_productId];
         p.price = _price;
         p.stock = _stock;
@@ -130,6 +132,7 @@ contract Marketplace {
         emit ProductUpdated(_productId, _price, _stock, _active);
     }
 
+    // viajante compra um item pagando o valor exato em ETH
     function buyProduct(uint256 _productId, uint256 _quantity)
         external
         payable
@@ -138,18 +141,18 @@ contract Marketplace {
     {
         Product storage p = products[_productId];
 
-        require(p.active, "Produto indisponivel");
+        require(p.active, "Item indisponivel no momento");
         require(_quantity > 0, "Quantidade invalida");
         require(p.stock >= _quantity, "Estoque insuficiente");
-        require(msg.sender != p.seller, "Vendedor nao pode comprar o proprio produto");
-        require(msg.value == p.price * _quantity, "Valor enviado incorreto");
+        require(msg.sender != p.seller, "Mercador nao pode comprar o proprio item");
+        require(msg.value == p.price * _quantity, "Valor em ETH incorreto");
 
         // atualiza o estado antes de mexer no dinheiro
         p.stock -= _quantity;
 
         uint256 fee = (msg.value * platformFeeBps) / 10_000;
         pendingWithdrawals[p.seller] += msg.value - fee;
-        pendingWithdrawals[owner] += fee;
+        pendingWithdrawals[owner] += fee; // parte da Guilda
 
         purchaseCount++;
         purchases[purchaseCount] = Purchase({
@@ -168,14 +171,14 @@ contract Marketplace {
         emit ProductPurchased(purchaseCount, _productId, msg.sender, p.seller, _quantity, msg.value);
     }
 
-    // só quem comprou pode avaliar, e só uma vez por compra
+    // só o viajante que comprou pode dar estrelas, e só uma vez por compra
     function rateProduct(uint256 _purchaseId, uint8 _rating) external {
         require(_purchaseId > 0 && _purchaseId <= purchaseCount, "Compra inexistente");
 
         Purchase storage c = purchases[_purchaseId];
-        require(c.buyer == msg.sender, "Apenas o comprador pode avaliar");
+        require(c.buyer == msg.sender, "Apenas o viajante da compra pode avaliar");
         require(!c.rated, "Compra ja avaliada");
-        require(_rating >= 1 && _rating <= 5, "Nota deve ser de 1 a 5");
+        require(_rating >= 1 && _rating <= 5, "Nota deve ser de 1 a 5 estrelas");
 
         c.rated = true;
 
@@ -186,10 +189,10 @@ contract Marketplace {
         emit ProductRated(_purchaseId, c.productId, msg.sender, _rating);
     }
 
-    // o ETH fica no contrato até o vendedor sacar
+    // as Moras ficam no contrato até o mercador sacar
     function withdraw() external nonReentrant {
         uint256 amount = pendingWithdrawals[msg.sender];
-        require(amount > 0, "Nada para sacar");
+        require(amount > 0, "Nenhuma Mora para sacar");
 
         pendingWithdrawals[msg.sender] = 0; // zera antes de enviar
         (bool ok, ) = payable(msg.sender).call{value: amount}("");
@@ -198,8 +201,9 @@ contract Marketplace {
         emit Withdrawal(msg.sender, amount);
     }
 
+    // só o Arconte muda a taxa da Guilda
     function setPlatformFee(uint256 _newFeeBps) external onlyOwner {
-        require(_newFeeBps <= MAX_FEE_BPS, "Taxa acima do limite");
+        require(_newFeeBps <= MAX_FEE_BPS, "Taxa da Guilda acima do limite");
         emit PlatformFeeChanged(platformFeeBps, _newFeeBps);
         platformFeeBps = _newFeeBps;
     }
@@ -217,7 +221,7 @@ contract Marketplace {
         }
     }
 
-    // devolve soma e quantidade, o front divide pra achar a média
+    // devolve soma e quantidade, o front divide pra achar a média de estrelas
     function getRating(uint256 _productId)
         external
         view
