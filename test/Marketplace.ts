@@ -21,6 +21,13 @@ async function deployWithProduct() {
   return ctx;
 }
 
+// produto cadastrado + 1 compra feita pelo buyer (compra id 1)
+async function deployWithPurchase() {
+  const ctx = await deployWithProduct();
+  await ctx.market.connect(ctx.buyer).buyProduct(1n, 1n, { value: ETH("0.01") });
+  return ctx;
+}
+
 describe("Marketplace", function () {
   describe("constructor", function () {
     it("define dono e taxa", async function () {
@@ -106,6 +113,56 @@ describe("Marketplace", function () {
       await expect(market.connect(buyer).buyProduct(1n, 1n, { value: ETH("0.01") })).to.be.revertedWith(
         "Produto indisponivel",
       );
+    });
+  });
+
+  describe("avaliacao pos-compra", function () {
+    it("comprador avalia, emite evento e atualiza a nota do produto", async function () {
+      const { market, buyer } = await deployWithPurchase();
+
+      await expect(market.connect(buyer).rateProduct(1n, 4))
+        .to.emit(market, "ProductRated")
+        .withArgs(1n, 1n, buyer.address, 4);
+
+      const [sum, count] = await market.getRating(1n);
+      expect(sum).to.equal(4n);
+      expect(count).to.equal(1n);
+      expect((await market.getPurchase(1n)).rated).to.equal(true);
+    });
+
+    it("soma varias avaliacoes de compras diferentes", async function () {
+      const { market, buyer, other } = await deployWithPurchase();
+      await market.connect(other).buyProduct(1n, 1n, { value: ETH("0.01") });
+
+      await market.connect(buyer).rateProduct(1n, 5);
+      await market.connect(other).rateProduct(2n, 3);
+
+      const [sum, count] = await market.getRating(1n);
+      expect(sum).to.equal(8n);
+      expect(count).to.equal(2n);
+    });
+
+    it("so o comprador daquela compra pode avaliar", async function () {
+      const { market, seller, other } = await deployWithPurchase();
+      await expect(market.connect(other).rateProduct(1n, 5)).to.be.revertedWith("Apenas o comprador pode avaliar");
+      await expect(market.connect(seller).rateProduct(1n, 5)).to.be.revertedWith("Apenas o comprador pode avaliar");
+    });
+
+    it("nao deixa avaliar a mesma compra duas vezes", async function () {
+      const { market, buyer } = await deployWithPurchase();
+      await market.connect(buyer).rateProduct(1n, 5);
+      await expect(market.connect(buyer).rateProduct(1n, 1)).to.be.revertedWith("Compra ja avaliada");
+    });
+
+    it("rejeita nota fora de 1 a 5", async function () {
+      const { market, buyer } = await deployWithPurchase();
+      await expect(market.connect(buyer).rateProduct(1n, 0)).to.be.revertedWith("Nota deve ser de 1 a 5");
+      await expect(market.connect(buyer).rateProduct(1n, 6)).to.be.revertedWith("Nota deve ser de 1 a 5");
+    });
+
+    it("rejeita compra que nao existe", async function () {
+      const { market, buyer } = await deployWithPurchase();
+      await expect(market.connect(buyer).rateProduct(99n, 5)).to.be.revertedWith("Compra inexistente");
     });
   });
 

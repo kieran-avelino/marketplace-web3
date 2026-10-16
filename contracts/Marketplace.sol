@@ -13,6 +13,8 @@ contract Marketplace {
         uint256 stock;
         address seller;
         bool active;
+        uint256 ratingSum; // soma de todas as notas
+        uint256 ratingCount; // quantas avaliações recebeu
     }
 
     struct Purchase {
@@ -23,6 +25,7 @@ contract Marketplace {
         uint256 quantity;
         uint256 totalPaid;
         uint256 timestamp;
+        bool rated; // true depois que o comprador avalia
     }
 
     address public immutable owner;
@@ -51,6 +54,7 @@ contract Marketplace {
         uint256 quantity,
         uint256 totalPaid
     );
+    event ProductRated(uint256 indexed purchaseId, uint256 indexed productId, address indexed buyer, uint8 rating);
     event Withdrawal(address indexed account, uint256 amount);
     event PlatformFeeChanged(uint256 oldFeeBps, uint256 newFeeBps);
 
@@ -103,7 +107,9 @@ contract Marketplace {
             price: _price,
             stock: _stock,
             seller: msg.sender,
-            active: true
+            active: true,
+            ratingSum: 0,
+            ratingCount: 0
         });
         productsBySeller[msg.sender].push(productCount);
 
@@ -153,12 +159,31 @@ contract Marketplace {
             seller: p.seller,
             quantity: _quantity,
             totalPaid: msg.value,
-            timestamp: block.timestamp
+            timestamp: block.timestamp,
+            rated: false
         });
         purchasesByBuyer[msg.sender].push(purchaseCount);
         salesBySeller[p.seller].push(purchaseCount);
 
         emit ProductPurchased(purchaseCount, _productId, msg.sender, p.seller, _quantity, msg.value);
+    }
+
+    // só quem comprou pode avaliar, e só uma vez por compra
+    function rateProduct(uint256 _purchaseId, uint8 _rating) external {
+        require(_purchaseId > 0 && _purchaseId <= purchaseCount, "Compra inexistente");
+
+        Purchase storage c = purchases[_purchaseId];
+        require(c.buyer == msg.sender, "Apenas o comprador pode avaliar");
+        require(!c.rated, "Compra ja avaliada");
+        require(_rating >= 1 && _rating <= 5, "Nota deve ser de 1 a 5");
+
+        c.rated = true;
+
+        Product storage p = products[c.productId];
+        p.ratingSum += _rating;
+        p.ratingCount++;
+
+        emit ProductRated(_purchaseId, c.productId, msg.sender, _rating);
     }
 
     // o ETH fica no contrato até o vendedor sacar
@@ -190,6 +215,17 @@ contract Marketplace {
         for (uint256 i = 0; i < productCount; i++) {
             list[i] = products[i + 1];
         }
+    }
+
+    // devolve soma e quantidade, o front divide pra achar a média
+    function getRating(uint256 _productId)
+        external
+        view
+        productExists(_productId)
+        returns (uint256 sum, uint256 count)
+    {
+        Product storage p = products[_productId];
+        return (p.ratingSum, p.ratingCount);
     }
 
     function getPurchase(uint256 _purchaseId) external view returns (Purchase memory) {
