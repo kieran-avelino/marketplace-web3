@@ -1,14 +1,14 @@
 {
   "name": "marketplace-web3",
   "version": "1.0.0",
-  "description": "Marketplace Web3 - 2a avaliacao pratica",
+  "description": "TeyvatMarket - mercado de Genshin Impact em Web3 (2a avaliacao pratica)",
   "scripts": {
     "test": "hardhat test",
     "compile": "hardhat build",
     "gas": "hardhat test --gas-stats",
     "node": "hardhat node",
-    "deploy:local": "hardhat ignition deploy ignition/modules/Marketplace.ts --network localhost",
-    "deploy:sepolia": "hardhat ignition deploy ignition/modules/Marketplace.ts --network sepolia --verify"
+    "deploy:local": "hardhat ignition deploy ignition/modules/TeyvatMarket.ts --network localhost",
+    "deploy:sepolia": "hardhat ignition deploy ignition/modules/TeyvatMarket.ts --network sepolia --verify"
   },
   "keywords": [],
   "author": "",

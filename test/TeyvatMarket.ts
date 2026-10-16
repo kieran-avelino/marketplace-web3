@@ -4,12 +4,12 @@ import { network } from "hardhat";
 const { ethers } = await network.getOrCreate();
 
 const ETH = (v: string) => ethers.parseEther(v);
-const FEE_BPS = 250n; // 2,5%
+const FEE_BPS = 250n; // taxa da Guilda: 2,5%
 
-// deploy limpo pra cada teste
+// owner = Arconte, seller = mercador, buyer = viajante
 async function deploy() {
   const [owner, seller, buyer, other] = await ethers.getSigners();
-  const market = await ethers.deployContract("Marketplace", [FEE_BPS]);
+  const market = await ethers.deployContract("TeyvatMarket", [FEE_BPS]);
   return { market, owner, seller, buyer, other };
 }
 
@@ -17,39 +17,43 @@ async function deployWithProduct() {
   const ctx = await deploy();
   await ctx.market
     .connect(ctx.seller)
-    .addProduct("Camiseta Web3", "Algodao 100%", "ipfs://img", ETH("0.01"), 10n);
+    .addProduct("Conselho do Andarilho", "Livro de EXP pra subir de nivel", "ipfs://conselho-do-andarilho", ETH("0.01"), 10n);
   return ctx;
 }
 
-// produto cadastrado + 1 compra feita pelo buyer (compra id 1)
+// item cadastrado + 1 compra feita pelo viajante (compra id 1)
 async function deployWithPurchase() {
   const ctx = await deployWithProduct();
   await ctx.market.connect(ctx.buyer).buyProduct(1n, 1n, { value: ETH("0.01") });
   return ctx;
 }
 
-describe("Marketplace", function () {
+describe("TeyvatMarket", function () {
   describe("constructor", function () {
-    it("define dono e taxa", async function () {
+    it("define o Arconte e a taxa da Guilda", async function () {
       const { market, owner } = await deploy();
       expect(await market.owner()).to.equal(owner.address);
       expect(await market.platformFeeBps()).to.equal(FEE_BPS);
     });
 
     it("rejeita taxa acima de 10%", async function () {
-      await expect(ethers.deployContract("Marketplace", [1001n])).to.be.revertedWith("Taxa acima do limite");
+      await expect(ethers.deployContract("TeyvatMarket", [1001n])).to.be.revertedWith(
+        "Taxa da Guilda acima do limite",
+      );
     });
   });
 
-  describe("cadastro de produtos", function () {
-    it("cadastra produto e emite evento", async function () {
+  describe("cadastro de itens", function () {
+    it("cadastra item e emite evento", async function () {
       const { market, seller } = await deploy();
-      await expect(market.connect(seller).addProduct("Caneca", "Ceramica", "", ETH("0.005"), 5n))
+      await expect(
+        market.connect(seller).addProduct("Madame Doce", "Prato favorito dos viajantes de Mondstadt", "", ETH("0.005"), 5n),
+      )
         .to.emit(market, "ProductAdded")
-        .withArgs(1n, seller.address, "Caneca", ETH("0.005"), 5n);
+        .withArgs(1n, seller.address, "Madame Doce", ETH("0.005"), 5n);
 
       const p = await market.getProduct(1n);
-      expect(p.name).to.equal("Caneca");
+      expect(p.name).to.equal("Madame Doce");
       expect(p.seller).to.equal(seller.address);
       expect(p.active).to.equal(true);
       expect(await market.productCount()).to.equal(1n);
@@ -58,15 +62,15 @@ describe("Marketplace", function () {
 
     it("valida nome, preco e estoque", async function () {
       const { market } = await deploy();
-      await expect(market.addProduct("", "", "", 1n, 1n)).to.be.revertedWith("Nome obrigatorio");
-      await expect(market.addProduct("X", "", "", 0n, 1n)).to.be.revertedWith("Preco deve ser maior que zero");
-      await expect(market.addProduct("X", "", "", 1n, 0n)).to.be.revertedWith("Estoque deve ser maior que zero");
+      await expect(market.addProduct("", "", "", 1n, 1n)).to.be.revertedWith("O item precisa de um nome");
+      await expect(market.addProduct("X", "", "", 0n, 1n)).to.be.revertedWith("O preco deve ser maior que zero");
+      await expect(market.addProduct("X", "", "", 1n, 0n)).to.be.revertedWith("O estoque deve ser maior que zero");
     });
 
-    it("so o vendedor atualiza o produto", async function () {
+    it("so o mercador atualiza o item", async function () {
       const { market, seller, other } = await deployWithProduct();
       await expect(market.connect(other).updateProduct(1n, ETH("0.02"), 3n, true)).to.be.revertedWith(
-        "Apenas o vendedor do produto",
+        "Apenas o mercador deste item",
       );
       await expect(market.connect(seller).updateProduct(1n, ETH("0.02"), 3n, false))
         .to.emit(market, "ProductUpdated")
@@ -95,29 +99,29 @@ describe("Marketplace", function () {
       expect((await market.getSalesBySeller(seller.address)).length).to.equal(1);
     });
 
-    it("rejeita valor errado, estoque insuficiente, produto pausado e autocompra", async function () {
+    it("rejeita valor errado, estoque insuficiente, item pausado e autocompra", async function () {
       const { market, seller, buyer } = await deployWithProduct();
       await expect(market.connect(buyer).buyProduct(1n, 1n, { value: ETH("0.005") })).to.be.revertedWith(
-        "Valor enviado incorreto",
+        "Valor em ETH incorreto",
       );
       await expect(market.connect(buyer).buyProduct(1n, 11n, { value: ETH("0.11") })).to.be.revertedWith(
         "Estoque insuficiente",
       );
       await expect(market.connect(seller).buyProduct(1n, 1n, { value: ETH("0.01") })).to.be.revertedWith(
-        "Vendedor nao pode comprar o proprio produto",
+        "Mercador nao pode comprar o proprio item",
       );
       await expect(market.connect(buyer).buyProduct(99n, 1n, { value: ETH("0.01") })).to.be.revertedWith(
-        "Produto inexistente",
+        "Esse item nao existe em Teyvat",
       );
       await market.connect(seller).updateProduct(1n, ETH("0.01"), 10n, false);
       await expect(market.connect(buyer).buyProduct(1n, 1n, { value: ETH("0.01") })).to.be.revertedWith(
-        "Produto indisponivel",
+        "Item indisponivel no momento",
       );
     });
   });
 
   describe("avaliacao pos-compra", function () {
-    it("comprador avalia, emite evento e atualiza a nota do produto", async function () {
+    it("viajante avalia, emite evento e atualiza as estrelas do item", async function () {
       const { market, buyer } = await deployWithPurchase();
 
       await expect(market.connect(buyer).rateProduct(1n, 4))
@@ -142,10 +146,14 @@ describe("Marketplace", function () {
       expect(count).to.equal(2n);
     });
 
-    it("so o comprador daquela compra pode avaliar", async function () {
+    it("so o viajante daquela compra pode avaliar", async function () {
       const { market, seller, other } = await deployWithPurchase();
-      await expect(market.connect(other).rateProduct(1n, 5)).to.be.revertedWith("Apenas o comprador pode avaliar");
-      await expect(market.connect(seller).rateProduct(1n, 5)).to.be.revertedWith("Apenas o comprador pode avaliar");
+      await expect(market.connect(other).rateProduct(1n, 5)).to.be.revertedWith(
+        "Apenas o viajante da compra pode avaliar",
+      );
+      await expect(market.connect(seller).rateProduct(1n, 5)).to.be.revertedWith(
+        "Apenas o viajante da compra pode avaliar",
+      );
     });
 
     it("nao deixa avaliar a mesma compra duas vezes", async function () {
@@ -154,10 +162,10 @@ describe("Marketplace", function () {
       await expect(market.connect(buyer).rateProduct(1n, 1)).to.be.revertedWith("Compra ja avaliada");
     });
 
-    it("rejeita nota fora de 1 a 5", async function () {
+    it("rejeita nota fora de 1 a 5 estrelas", async function () {
       const { market, buyer } = await deployWithPurchase();
-      await expect(market.connect(buyer).rateProduct(1n, 0)).to.be.revertedWith("Nota deve ser de 1 a 5");
-      await expect(market.connect(buyer).rateProduct(1n, 6)).to.be.revertedWith("Nota deve ser de 1 a 5");
+      await expect(market.connect(buyer).rateProduct(1n, 0)).to.be.revertedWith("Nota deve ser de 1 a 5 estrelas");
+      await expect(market.connect(buyer).rateProduct(1n, 6)).to.be.revertedWith("Nota deve ser de 1 a 5 estrelas");
     });
 
     it("rejeita compra que nao existe", async function () {
@@ -167,7 +175,7 @@ describe("Marketplace", function () {
   });
 
   describe("saque", function () {
-    it("vendedor saca o saldo e o saldo zera", async function () {
+    it("mercador saca as Moras e o saldo zera", async function () {
       const { market, seller, buyer } = await deployWithProduct();
       await market.connect(buyer).buyProduct(1n, 1n, { value: ETH("0.01") });
       const pending = await market.pendingWithdrawals(seller.address);
@@ -178,14 +186,14 @@ describe("Marketplace", function () {
         [pending, -pending],
       );
       expect(await market.pendingWithdrawals(seller.address)).to.equal(0n);
-      await expect(market.connect(seller).withdraw()).to.be.revertedWith("Nada para sacar");
+      await expect(market.connect(seller).withdraw()).to.be.revertedWith("Nenhuma Mora para sacar");
     });
   });
 
   describe("administracao", function () {
-    it("so o dono altera a taxa", async function () {
+    it("so o Arconte altera a taxa da Guilda", async function () {
       const { market, other } = await deploy();
-      await expect(market.connect(other).setPlatformFee(100n)).to.be.revertedWith("Apenas o dono da plataforma");
+      await expect(market.connect(other).setPlatformFee(100n)).to.be.revertedWith("Apenas o Arconte da loja");
       await expect(market.setPlatformFee(100n)).to.emit(market, "PlatformFeeChanged").withArgs(FEE_BPS, 100n);
     });
   });
