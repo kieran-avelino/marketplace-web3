@@ -18,6 +18,7 @@ npm run gas
 - `contracts/` contrato `TeyvatMarket` em Solidity
 - `test/` testes
 - `ignition/modules/` script de deploy
+- `frontend/` interface Web3 (`index.html`, ethers.js + MetaMask)
 - `hardhat.config.ts` configuração (Sepolia)
 
 ## Deploy na Sepolia
@@ -32,3 +33,19 @@ npm run deploy:sepolia
 ```
 
 Usar uma carteira só de teste, nunca a principal.
+
+## Contrato publicado (Sepolia)
+
+- Endereço: `0xB5f5945aaB733399871027A3ec526e3690beD4Fd`
+- Etherscan (código verificado): https://sepolia.etherscan.io/address/0xB5f5945aaB733399871027A3ec526e3690beD4Fd#code
+- Transação de deploy: `0xee71e8ae49cfac99549d033a6a463b9a6667ed28308d339e1632e58aeb959ee9`
+
+## Como abrir o frontend
+
+Com a MetaMask instalada e na rede Sepolia, na raiz do projeto:
+
+```bash
+npx serve frontend
+```
+
+Abrir `http://localhost:3000`. O endereço do contrato está na constante `CONTRACT_ADDRESS` do `index.html`.
