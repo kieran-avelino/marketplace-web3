@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TeyvatMarket</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<style>
+:root{--ink:#1b1b2a;--muted:#6b6b7b;--card:#f0f0f0;--line:#e2e2e8;--accent:#3a3fb5;--ok:#1f8a4c;--bad:#c0392b}
+*{box-sizing:border-box}
+body{margin:0;font-family:Nunito,system-ui,sans-serif;color:var(--ink);background:#fff}
+h1,h2,h3,.btn,.price{font-family:Rajdhani,sans-serif}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 20px;flex-wrap:wrap}
+.logo{font:700 30px Rajdhani;letter-spacing:.5px;color:#1c2a6b}
+.logo small{display:block;font-size:11px;letter-spacing:5px;color:#4a63b8;margin-top:-6px}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{border:0;border-radius:8px;padding:9px 16px;font-size:16px;font-weight:700;cursor:pointer;background:var(--accent);color:#fff}
+.btn.alt{background:#fff;color:var(--accent);border:2px solid var(--accent)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn:focus-visible,.cat:focus-visible,.card:focus-visible{outline:3px solid #7a80ff;outline-offset:2px}
+#addr{font-size:14px;color:var(--muted)}
+.banner{height:260px;background:linear-gradient(120deg,#f6c453 0%,#f7e2a6 35%,#f3b6a0 70%,#b9a6d6 100%);display:flex;align-items:center;padding:0 6vw}
+.banner h2{margin:0;font-size:clamp(30px,6vw,60px);color:#fff;text-shadow:0 2px 12px rgba(80,40,0,.35);max-width:640px;line-height:1.05}
+main{padding:0 20px 60px}
+.cats{text-align:center;margin:22px 0 8px}
+.cats h3{margin:0 0 8px;font-size:22px}
+.cats div{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.cat{width:74px;height:74px;border-radius:10px;border:2px solid var(--c);background:#fff;box-shadow:0 5px 0 var(--c);cursor:pointer;font-size:30px}
+.cat.on{background:var(--c)}
+section h2{font-size:24px;margin:22px 0 10px}
+.row{display:flex;gap:12px;overflow-x:auto;padding-bottom:10px}
+.card{flex:0 0 190px;background:var(--card);border-radius:14px;overflow:hidden;cursor:pointer}
+.thumb{height:190px;background:linear-gradient(135deg,#d9d4f2,#f6dcc3);display:flex;align-items:center;justify-content:center;font-size:56px}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.info{padding:10px}
+.name{font-size:14px;line-height:1.25;height:35px;overflow:hidden}
+.price{font-size:22px;font-weight:700;margin:6px 0 2px}
+.stars{font-size:12px;color:#444}
+.empty{color:var(--muted);padding:18px 0}
+dialog{border:0;border-radius:16px;padding:0;max-width:440px;width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+dialog::backdrop{background:rgba(20,20,40,.55)}
+.dlg{padding:20px;display:grid;gap:10px}
+.dlg h3{margin:0;font-size:26px}
+.dlg label{display:grid;gap:3px;font-size:13px;color:var(--muted)}
+.dlg input,.dlg select,.dlg textarea{font:inherit;padding:8px;border:1px solid #ccc;border-radius:8px;color:var(--ink)}
+.dlg .acts{display:flex;gap:8px;justify-content:flex-end}
+.tx{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 18px;border-radius:10px;max-width:90vw;display:none;z-index:9}
+#toast.bad{background:var(--bad)}#toast.ok{background:var(--ok)}
+@media (max-width:560px){.banner{height:180px}.card{flex-basis:160px}.thumb{height:150px}}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">TeyvatMarket<small>MORAS EM ETH</small></div>
+  <div class="bar">
+    <span id="addr"></span>
+    <button class="btn alt" id="btnAdd" hidden>Cadastrar item</button>
+    <button class="btn alt" id="btnMine" hidden>Meu diário</button>
+    <button class="btn" id="btnConnect">Conectar MetaMask</button>
+  </div>
+</header>
+
+<div class="banner"><h2>Itens de Teyvat, pagos em Moras</h2></div>
+
+<main>
+  <div class="cats"><h3>Categorias</h3><div id="cats"></div></div>
+  <section><h2>Itens à venda</h2><div class="row" id="rowAll"></div></section>
+  <section><h2>Mais bem avaliados</h2><div class="row" id="rowTop"></div></section>
+</main>
+
+<dialog id="dBuy"><div class="dlg" id="buyBody"></div></dialog>
+
+<dialog id="dAdd"><div class="dlg">
+  <h3>Cadastrar item</h3>
+  <label>Nome<input id="fName" maxlength="80"></label>
+  <label>Descrição<textarea id="fDesc" rows="2"></textarea></label>
+  <label>Link da imagem (https://...)<input id="fImg"></label>
+  <label>Categoria<select id="fCat"></select></label>
+  <label>Preço em ETH<input id="fPrice" type="number" step="0.0001" min="0"></label>
+  <label>Estoque<input id="fStock" type="number" min="1" value="1"></label>
+  <div class="acts"><button class="btn alt" data-close="dAdd">Cancelar</button><button class="btn" id="btnSave">Cadastrar item</button></div>
+</div></dialog>
+
+<dialog id="dMine"><div class="dlg" id="mineBody"></div></dialog>
+<div id="toast" role="status"></div>
+
+<script>
+// ====== configuração: contrato publicado na Sepolia ======
+const CONTRACT_ADDRESS = "0xB5f5945aaB733399871027A3ec526e3690beD4Fd";
+const SEPOLIA_ID = 11155111n;
+const ETHERSCAN = "https://sepolia.etherscan.io";
+
+const P = "tuple(uint256 id,string name,string description,string imageURI,uint256 price,uint256 stock,address seller,bool active,uint256 ratingSum,uint256 ratingCount)";
+const C = "tuple(uint256 id,uint256 productId,address buyer,address seller,uint256 quantity,uint256 totalPaid,uint256 timestamp,bool rated)";
+const ABI = [
+  "function addProduct(string,string,string,uint256,uint256) returns (uint256)",
+  "function buyProduct(uint256,uint256) payable",
+  "function rateProduct(uint256,uint8)",
+  "function withdraw()",
+  "function pendingWithdrawals(address) view returns (uint256)",
+  `function getAllProducts() view returns (${P}[])`,
+  `function getPurchasesByBuyer(address) view returns (${C}[])`,
+  `function getSalesBySeller(address) view returns (${C}[])`
+];
+
+// o contrato não tem campo de categoria: guardamos como prefixo "[Pyro]" na descrição
+const CATS = [
+  ["Hydro","💧","#1aa3ff"],["Anemo","🌀","#2bb89a"],["Cryo","❄️","#5bb8cc"],
+  ["Geo","🔶","#c98a14"],["Electro","⚡","#8a2be2"],["Pyro","🔥","#d6322e"],["Dendro","🌿","#5aa817"]
+];
+
+let provider, signer, account, market, products = [], filter = null;
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const short = a => a.slice(0,6)+"..."+a.slice(-4);
+
+function toast(msg, kind=""){
+  const t=$("toast"); t.textContent=msg; t.className=kind; t.style.display="block";
+  clearTimeout(toast.h); toast.h=setTimeout(()=>t.style.display="none",5000);
+}
+function errMsg(e){
+  const m = e?.reason || e?.shortMessage || e?.message || "Erro desconhecido";
+  if (e?.code === "ACTION_REJECTED") return "Transação recusada na MetaMask.";
+  return m;
+}
+function parseCat(desc){
+  const m = /^\[(\w+)\]\s*/.exec(desc);
+  return m ? {cat:m[1], text:desc.slice(m[0].length)} : {cat:null, text:desc};
+}
+function avg(p){ return p.ratingCount > 0n ? Number(p.ratingSum)/Number(p.ratingCount) : 0; }
+function starsText(p){
+  if (p.ratingCount === 0n) return "Sem avaliações";
+  const a = avg(p), full = Math.round(a);
+  return "★".repeat(full) + "☆".repeat(5-full) + " " + a.toFixed(1) + " (" + p.ratingCount + ")";
+}
+
+// ====== carteira ======
+async function connect(){
+  if (!window.ethereum) return toast("MetaMask não encontrada. Instale a extensão.", "bad");
+  try {
+    provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send("eth_requestAccounts", []);
+    const net = await provider.getNetwork();
+    if (net.chainId !== SEPOLIA_ID){
+      try { await window.ethereum.request({method:"wallet_switchEthereumChain", params:[{chainId:"0xaa36a7"}]}); }
+      catch { return toast("Troque a MetaMask para a rede Sepolia.", "bad"); }
+      provider = new ethers.BrowserProvider(window.ethereum);
+    }
+    signer = await provider.getSigner();
+    account = await signer.getAddress();
+    market = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+    $("addr").innerHTML = `<a href="${ETHERSCAN}/address/${account}" target="_blank" rel="noopener">${short(account)}</a>`;
+    $("btnConnect").hidden = true; $("btnAdd").hidden = false; $("btnMine").hidden = false;
+    toast("Carteira conectada.", "ok");
+    await load();
+  } catch(e){ toast(errMsg(e), "bad"); }
+}
+if (window.ethereum){
+  window.ethereum.on?.("accountsChanged", () => location.reload());
+  window.ethereum.on?.("chainChanged", () => location.reload());
+}
+
+// ====== leitura ======
+async function load(){
+  try {
+    const list = await market.getAllProducts();
+    products = list.map(p => ({...p.toObject()})); // copia para objeto simples
+    render();
+  } catch(e){ toast("Não foi possível ler o contrato. Confira o endereço e a rede.", "bad"); }
+}
+function cardHTML(p){
+  const {text} = parseCat(p.description);
+  const img = /^https?:\/\//.test(p.imageURI) ? `<img src="${esc(p.imageURI)}" alt="" loading="lazy">` : "🎁";
+  const soldOut = !p.active || p.stock === 0n;
+  return `<div class="card" tabindex="0" role="button" data-id="${p.id}">
+    <div class="thumb">${img}</div>
+    <div class="info"><div class="name">${esc(p.name)}</div>
+    <div class="price">${ethers.formatEther(p.price)} ETH</div>
+    <div class="stars">${soldOut ? "Esgotado" : starsText(p)}</div></div></div>`;
+}
+function render(){
+  const vis = products.filter(p => p.active && (!filter || parseCat(p.description).cat === filter));
+  $("rowAll").innerHTML = vis.length ? vis.map(cardHTML).join("") : `<div class="empty">Nenhum item aqui ainda. Cadastre o primeiro.</div>`;
+  const top = [...vis].filter(p => p.ratingCount > 0n).sort((a,b) => avg(b)-avg(a)).slice(0,10);
+  $("rowTop").innerHTML = top.length ? top.map(cardHTML).join("") : `<div class="empty">As avaliações aparecem depois das primeiras compras.</div>`;
+}
+document.addEventListener("click", e => {
+  const card = e.target.closest(".card"); if (card) openBuy(BigInt(card.dataset.id));
+  const cl = e.target.closest("[data-close]"); if (cl) $(cl.dataset.close).close();
+});
+document.addEventListener("keydown", e => {
+  if (e.key==="Enter" && e.target.classList?.contains("card")) e.target.click();
+});
+
+// ====== comprar ======
+function openBuy(id){
+  if (!account) return toast("Conecte a MetaMask primeiro.", "bad");
+  const p = products.find(x => x.id === id); if (!p) return;
+  const {text} = parseCat(p.description);
+  const mine = p.seller.toLowerCase() === account.toLowerCase();
+  $("buyBody").innerHTML = `
+    <h3>${esc(p.name)}</h3>
+    <div>${esc(text) || "Sem descrição."}</div>
+    <div class="stars">${starsText(p)}</div>
+    <div>Mercador: <a href="${ETHERSCAN}/address/${p.seller}" target="_blank" rel="noopener">${short(p.seller)}</a> · Estoque: ${p.stock}</div>
+    <label>Quantidade<input id="qty" type="number" min="1" max="${p.stock}" value="1"></label>
+    <div class="price" id="total"></div>
+    <div class="acts"><button class="btn alt" data-close="dBuy">Fechar</button>
+    <button class="btn" id="btnBuy" ${mine||p.stock===0n?"disabled":""}>${mine?"Item seu":"Comprar"}</button></div>`;
+  const upd = () => { const q = BigInt(Math.max(1, parseInt($("qty").value)||1)); $("total").textContent = "Total: " + ethers.formatEther(p.price*q) + " ETH"; };
+  $("qty").oninput = upd; upd();
+  $("btnBuy").onclick = async () => {
+    const q = BigInt(Math.max(1, parseInt($("qty").value)||1));
+    try {
+      $("btnBuy").disabled = true; toast("Confirme na MetaMask...");
+      const tx = await market.buyProduct(p.id, q, {value: p.price*q});
+      toast("Compra enviada. Aguardando confirmação...");
+      await tx.wait();
+      toast("Compra confirmada!", "ok"); $("dBuy").close(); await load();
+    } catch(e){ toast(errMsg(e), "bad"); $("btnBuy").disabled = false; }
+  };
+  $("dBuy").showModal();
+}
+
+// ====== cadastrar ======
+$("btnAdd").onclick = () => $("dAdd").showModal();
+$("btnSave").onclick = async () => {
+  const name = $("fName").value.trim();
+  const desc = `[${$("fCat").value}] ` + $("fDesc").value.trim();
+  try {
+    const price = ethers.parseEther($("fPrice").value || "0");
+    $("btnSave").disabled = true; toast("Confirme na MetaMask...");
+    const tx = await market.addProduct(name, desc, $("fImg").value.trim(), price, BigInt($("fStock").value||0));
+    toast("Item enviado. Aguardando confirmação...");
+    await tx.wait();
+    toast("Item cadastrado!", "ok"); $("dAdd").close(); await load();
+  } catch(e){ toast(errMsg(e), "bad"); }
+  $("btnSave").disabled = false;
+};
+
+// ====== diário (compras, avaliação e saque) ======
+$("btnMine").onclick = openMine;
+async function openMine(){
+  try {
+    const [buys, pend] = await Promise.all([market.getPurchasesByBuyer(account), market.pendingWithdrawals(account)]);
+    const name = id => esc(products.find(p => p.id === id)?.name ?? "Item #"+id);
+    $("mineBody").innerHTML = `
+      <h3>Meu diário</h3>
+      <div class="tx"><span>Saldo para sacar: <b>${ethers.formatEther(pend)} ETH</b></span>
+      <button class="btn" id="btnW" ${pend===0n?"disabled":""}>Sacar</button></div>
+      ${buys.length ? [...buys].reverse().map(c => `<div class="tx"><span>${name(c.productId)} × ${c.quantity}<br>
+        <small>${ethers.formatEther(c.totalPaid)} ETH · ${new Date(Number(c.timestamp)*1000).toLocaleString("pt-BR")}</small></span>
+        ${c.rated ? "<small>Avaliado</small>" : `<select data-rate="${c.id}"><option value="">Avaliar</option>${[1,2,3,4,5].map(n=>`<option>${n}</option>`).join("")}</select>`}</div>`).join("")
+        : `<div class="empty">Você ainda não comprou nada.</div>`}
+      <div class="acts"><button class="btn alt" data-close="dMine">Fechar</button></div>`;
+    $("btnW").onclick = async () => {
+      try { const tx = await market.withdraw(); toast("Saque enviado..."); await tx.wait(); toast("Saque concluído!", "ok"); openMine(); }
+      catch(e){ toast(errMsg(e), "bad"); }
+    };
+    $("mineBody").querySelectorAll("[data-rate]").forEach(s => s.onchange = async () => {
+      if (!s.value) return;
+      try { const tx = await market.rateProduct(BigInt(s.dataset.rate), Number(s.value)); toast("Avaliação enviada..."); await tx.wait(); toast("Avaliação registrada!", "ok"); await load(); openMine(); }
+      catch(e){ toast(errMsg(e), "bad"); s.value=""; }
+    });
+    $("dMine").showModal();
+  } catch(e){ toast(errMsg(e), "bad"); }
+}
+
+// ====== categorias ======
+$("fCat").innerHTML = CATS.map(c => `<option>${c[0]}</option>`).join("");
+$("cats").innerHTML = CATS.map(c => `<button class="cat" style="--c:${c[2]}" data-cat="${c[0]}" title="${c[0]}" aria-label="${c[0]}">${c[1]}</button>`).join("");
+$("cats").onclick = e => {
+  const b = e.target.closest(".cat"); if (!b) return;
+  filter = filter === b.dataset.cat ? null : b.dataset.cat;
+  document.querySelectorAll(".cat").forEach(x => x.classList.toggle("on", x.dataset.cat === filter));
+  render();
+};
+$("btnConnect").onclick = connect;
+</script>
+</body>
+</html>
